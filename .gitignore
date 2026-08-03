@@ -9,3 +9,6 @@ uploads/
 Thumbs.db
 coverage/
 .turbo/
+__pycache__/
+implementation_plan.md
+

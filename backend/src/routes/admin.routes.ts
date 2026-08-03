@@ -166,21 +166,29 @@ router.get('/orders/:id/download', async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'Order not found' });
     }
 
-    // Resolve the file on disk
-    const filePath = order.file_path
-      ? path.resolve(order.file_path)
-      : null;
+    const fileName = order.file_name || 'print_job.pdf';
+
+    if (order.file_data) {
+      const fileBuffer = Buffer.from(order.file_data, 'base64');
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
+      res.setHeader('Content-Type', order.file_type || 'application/octet-stream');
+      res.setHeader('Content-Length', fileBuffer.length);
+      res.setHeader('Cache-Control', 'no-store');
+      return res.send(fileBuffer);
+    }
+
+    // Resolve the file on disk (fallback)
+    const filePath = order.file_path ? path.resolve(order.file_path) : null;
 
     if (!filePath || !fs.existsSync(filePath)) {
       return res.status(404).json({ message: 'File not found on server' });
     }
 
-    const fileName = order.file_name || path.basename(filePath);
     const stat = fs.statSync(filePath);
 
     // Force browser to download (not preview) the file
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
-    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Type', order.file_type || 'application/octet-stream');
     res.setHeader('Content-Length', stat.size);
     res.setHeader('Cache-Control', 'no-store');
 

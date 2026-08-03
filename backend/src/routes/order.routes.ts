@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { authMiddleware } from '../middleware/auth';
 import { upload } from '../middleware/upload';
@@ -43,8 +44,11 @@ router.post('/', authMiddleware, upload.single('file'), async (req: Request, res
     
     const totalPrice = Math.round(((basePrice * pageCountNum * copiesNum * sizeMultiplier) + bindingCost) * 100) / 100;
 
-    // Generate unique order number
+    // Generate unique order number and file path
     const orderNumber = `SP-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+    const fileExt = path.extname(req.file.originalname) || '.pdf';
+    const uniqueFileName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${fileExt}`;
+    const fileBase64 = req.file.buffer ? req.file.buffer.toString('base64') : '';
 
     // Create order in database
     const { data: order, error } = await supabaseAdmin
@@ -53,7 +57,8 @@ router.post('/', authMiddleware, upload.single('file'), async (req: Request, res
         user_id: req.user!.id,
         order_number: orderNumber,
         file_name: req.file.originalname,
-        file_path: req.file.path,
+        file_path: uniqueFileName,
+        file_data: fileBase64,
         file_type: req.file.mimetype,
         file_size: req.file.size,
         page_count: pageCountNum,

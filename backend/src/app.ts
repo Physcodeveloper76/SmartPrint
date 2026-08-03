@@ -26,7 +26,29 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Static file serving for uploads
+// Dynamic file serving for uploads (Base64 from memory or disk)
+app.get('/uploads/:filename', async (req, res, next) => {
+  try {
+    const filename = req.params.filename;
+    const { data: orders } = await supabaseAdmin.from('orders').select('*');
+    const order = (orders || []).find((o: any) => 
+      o.file_path && (path.basename(o.file_path) === filename || o.file_path === filename)
+    );
+
+    if (order && order.file_data) {
+      const buffer = Buffer.from(order.file_data, 'base64');
+      res.setHeader('Content-Type', order.file_type || 'application/octet-stream');
+      res.setHeader('Content-Length', buffer.length);
+      res.setHeader('Cache-Control', 'no-store');
+      return res.send(buffer);
+    }
+    next();
+  } catch (err) {
+    next();
+  }
+});
+
+// Static file serving for uploads fallback
 app.use('/uploads', express.static(env.UPLOAD_DIR));
 
 // Health check
