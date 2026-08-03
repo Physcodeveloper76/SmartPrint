@@ -1,11 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { supabaseAdmin, mockUsers, mockProfiles, saveDb } from '../config/supabase';
+import { supabaseAdmin, mockUsers, mockProfiles, saveDb, ensureDefaultAccounts } from '../config/supabase';
 
 const router = Router();
 
 // POST /api/auth/register
 router.post('/register', async (req: Request, res: Response) => {
+  ensureDefaultAccounts();
   const { email, password, fullName, department, role = 'user' } = req.body;
 
   if (!email || !password || !fullName || !department) {
@@ -23,12 +24,10 @@ router.post('/register', async (req: Request, res: Response) => {
     const newUser = {
       id: userId,
       email: email.toLowerCase(),
-      password, // In a real app we'd bcrypt hash this, but simple text matches the prompt's simplicity.
+      password,
       role
     };
 
-    // Determine campus printing quota limit
-    // Students get 100 pages per semester, staff/faculty get 500 pages
     const isProfessor = email.toLowerCase().includes('prof') || email.toLowerCase().includes('faculty') || fullName.toLowerCase().includes('dr.');
     const quotaLimit = isProfessor ? 500 : 100;
 
@@ -60,6 +59,7 @@ router.post('/register', async (req: Request, res: Response) => {
 
 // POST /api/auth/login
 router.post('/login', async (req: Request, res: Response) => {
+  ensureDefaultAccounts();
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -74,18 +74,34 @@ router.post('/login', async (req: Request, res: Response) => {
     return res.status(401).json({ message: 'Invalid email or password' });
   }
 
-  const profile = mockProfiles.find(p => p.id === user.id);
+  let profile = mockProfiles.find(p => p.id === user.id);
+  if (!profile) {
+    const isProfessor = user.email.toLowerCase().includes('prof');
+    const isAdmin = user.email.toLowerCase().includes('admin') || user.role === 'admin';
+    profile = {
+      id: user.id,
+      full_name: isAdmin ? 'Campus IT Admin' : isProfessor ? 'Dr. Sarah Connor (Professor)' : 'Student User',
+      role: isAdmin ? 'admin' : 'user',
+      department: isAdmin ? 'IT Services' : isProfessor ? 'Electrical Engineering' : 'Computer Science',
+      quota_limit: isAdmin ? 9999 : isProfessor ? 500 : 100,
+      quota_used: 0,
+      created_at: new Date().toISOString()
+    };
+    mockProfiles.push(profile);
+  }
+
   const token = `Session-${user.id}`;
 
   res.json({
     token,
     user: { id: user.id, email: user.email },
-    profile: profile || null
+    profile
   });
 });
 
 // GET /api/auth/me
 router.get('/me', async (req: Request, res: Response) => {
+  ensureDefaultAccounts();
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ message: 'No authorization token provided' });
@@ -98,10 +114,25 @@ router.get('/me', async (req: Request, res: Response) => {
     return res.status(401).json({ message: 'Session expired or invalid' });
   }
 
-  const profile = mockProfiles.find(p => p.id === data.user.id);
+  let profile = mockProfiles.find(p => p.id === data.user.id);
+  if (!profile) {
+    const isProfessor = data.user.email.toLowerCase().includes('prof');
+    const isAdmin = data.user.email.toLowerCase().includes('admin') || data.user.role === 'admin';
+    profile = {
+      id: data.user.id,
+      full_name: isAdmin ? 'Campus IT Admin' : isProfessor ? 'Dr. Sarah Connor (Professor)' : 'Student User',
+      role: isAdmin ? 'admin' : 'user',
+      department: isAdmin ? 'IT Services' : isProfessor ? 'Electrical Engineering' : 'Computer Science',
+      quota_limit: isAdmin ? 9999 : isProfessor ? 500 : 100,
+      quota_used: 0,
+      created_at: new Date().toISOString()
+    };
+    mockProfiles.push(profile);
+  }
+
   res.json({
     user: { id: data.user.id, email: data.user.email },
-    profile: profile || null
+    profile
   });
 });
 
