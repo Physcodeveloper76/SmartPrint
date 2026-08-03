@@ -572,6 +572,11 @@ def poll_and_process():
                     except:
                         pass
 
+    except requests.exceptions.ConnectionError:
+        logger.error(f"Cannot connect to backend server at {API_BASE_URL}")
+        logger.error(f"  💡 TIP: If monitoring your Vercel deployment, run:")
+        logger.error(f"         python print_bridge.py https://your-app.vercel.app")
+        logger.error(f"  💡 TIP: If testing locally, start the servers first with: python run.py")
     except requests.exceptions.RequestException as net_err:
         logger.error(f"Network / Connectivity Issue with backend server: {net_err}")
     except Exception as e:
