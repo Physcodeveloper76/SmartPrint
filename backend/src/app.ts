@@ -52,12 +52,12 @@ app.get('/uploads/:filename', async (req, res, next) => {
 app.use('/uploads', express.static(env.UPLOAD_DIR));
 
 // Health check
-app.get('/api/health', (req, res) => {
+app.get(['/api/health', '/health'], (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // GET /api/queue - Poll for new, paid print jobs (status: queued)
-app.get('/api/queue', async (req, res) => {
+app.get(['/api/queue', '/queue'], async (req, res) => {
   try {
     const { data: orders, error } = await supabaseAdmin
       .from('orders')
@@ -92,7 +92,7 @@ app.get('/api/queue', async (req, res) => {
 });
 
 // POST /api/status - Update print job status from local bridge
-app.post('/api/status', async (req, res) => {
+app.post(['/api/status', '/status'], async (req, res) => {
   try {
     const { jobId, status } = req.body;
     if (!jobId || !status) {
@@ -129,7 +129,6 @@ app.post('/api/status', async (req, res) => {
     }
 
     // Emit real-time status updates via Socket.IO
-    // Map 'printed' to 'completed' for standard frontend status checks if needed
     const socketStatus = status === 'printed' ? 'completed' : status;
     
     emitToUser(order.user_id, 'order:status', {
@@ -172,11 +171,18 @@ app.post('/api/status', async (req, res) => {
   }
 });
 
-// API Routes
+// API Routes (mounted for both /api/* and /* paths for Vercel serverless compatibility)
 app.use('/api/auth', authRoutes);
+app.use('/auth', authRoutes);
+
 app.use('/api/orders', orderRoutes);
+app.use('/orders', orderRoutes);
+
 app.use('/api/payments', paymentRoutes);
+app.use('/payments', paymentRoutes);
+
 app.use('/api/admin', adminRoutes);
+app.use('/admin', adminRoutes);
 
 // Error handler
 app.use(errorHandler);
