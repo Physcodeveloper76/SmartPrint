@@ -43,14 +43,7 @@ if sys.platform == "win32":
 
 # =====================================================================
 # ⚙️ Configuration & Defaults
-# Parse command line arguments if provided (e.g., python print_bridge.py https://your-app.vercel.app/api)
-for idx, arg in enumerate(sys.argv[1:]):
-    if arg in ("--url", "-u") and idx + 2 < len(sys.argv):
-        os.environ["SMARTPRINT_API_URL"] = sys.argv[idx + 2]
-    elif arg.startswith("http://") or arg.startswith("https://"):
-        url = arg.rstrip('/')
-        os.environ["SMARTPRINT_API_URL"] = url if url.endswith('/api') else f"{url}/api"
-
+# =====================================================================
 API_BASE_URL = os.environ.get("SMARTPRINT_API_URL", "http://localhost:3001/api")
 POLL_INTERVAL = int(os.environ.get("SMARTPRINT_POLL_INTERVAL", "5"))
 
@@ -572,11 +565,6 @@ def poll_and_process():
                     except:
                         pass
 
-    except requests.exceptions.ConnectionError:
-        logger.error(f"Cannot connect to backend server at {API_BASE_URL}")
-        logger.error(f"  💡 TIP: If monitoring your Vercel deployment, run:")
-        logger.error(f"         python print_bridge.py https://your-app.vercel.app")
-        logger.error(f"  💡 TIP: If testing locally, start the servers first with: python run.py")
     except requests.exceptions.RequestException as net_err:
         logger.error(f"Network / Connectivity Issue with backend server: {net_err}")
     except Exception as e:

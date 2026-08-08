@@ -32,22 +32,19 @@ export default function LoginPage() {
   };
 
   const handleQuickLogin = async (roleEmail: string, rolePass: string) => {
-    setEmail(roleEmail);
-    setPassword(rolePass);
     try {
       await login(roleEmail, rolePass);
       addToast({
         type: 'success',
         title: 'Quick Login Success',
-        message: `Logged in as ${roleEmail}`
+        message: `Logged in successfully.`
       });
       navigate('/');
     } catch (err: any) {
-      console.error('[Quick Login Error]', err);
       addToast({
         type: 'error',
         title: 'Quick Login Failed',
-        message: err.response?.data?.message || (err.message ? `Network Error: ${err.message}` : 'Cannot connect to backend API server.')
+        message: err.response?.data?.message || 'Error occurred.'
       });
     }
   };
@@ -166,7 +163,6 @@ export default function LoginPage() {
         {/* Quick Logins */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)', marginBottom: 'var(--space-6)' }}>
           <button
-            type="button"
             onClick={() => handleQuickLogin('student@college.edu', 'student123')}
             style={{
               padding: 'var(--space-2)',
@@ -181,7 +177,6 @@ export default function LoginPage() {
             🎓 Student Account
           </button>
           <button
-            type="button"
             onClick={() => handleQuickLogin('professor@college.edu', 'professor123')}
             style={{
               padding: 'var(--space-2)',
@@ -196,7 +191,6 @@ export default function LoginPage() {
             💼 Professor Account
           </button>
           <button
-            type="button"
             onClick={() => handleQuickLogin('admin@college.edu', 'admin123')}
             style={{
               gridColumn: 'span 2',

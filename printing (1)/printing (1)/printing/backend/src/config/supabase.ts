@@ -6,11 +6,7 @@ import path from 'path';
 // File-Based Persistent JSON Database (Supabase Mock Replacement)
 // ============================================================
 
-import os from 'os';
-
-const isVercel = Boolean(process.env.VERCEL);
-const PRIMARY_DATA_DIR = path.resolve(__dirname, '../../../data');
-const DATA_DIR = isVercel ? path.join(os.tmpdir(), 'data') : PRIMARY_DATA_DIR;
+const DATA_DIR = path.resolve(__dirname, '../../../data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 
 // In-memory tables
@@ -33,28 +29,50 @@ export function saveDb() {
     };
     fs.writeFileSync(DB_FILE, JSON.stringify(payload, null, 2), 'utf-8');
   } catch (error) {
-    // Silent catch on read-only environments
+    console.error('[DB] Save error:', error);
   }
 }
 
-export function ensureDefaultAccounts() {
+// Helper to load data from db.json
+export function loadDb() {
+  try {
+    if (fs.existsSync(DB_FILE)) {
+      const content = fs.readFileSync(DB_FILE, 'utf-8');
+      const data = JSON.parse(content);
+      
+      mockUsers.length = 0;
+      mockUsers.push(...(data.users || []));
+      
+      mockProfiles.length = 0;
+      mockProfiles.push(...(data.profiles || []));
+      
+      mockOrders.length = 0;
+      mockOrders.push(...(data.orders || []));
+      
+      mockNotifications.length = 0;
+      mockNotifications.push(...(data.notifications || []));
+      
+      console.log('[DB] Loaded from file successfully.');
+      return;
+    }
+  } catch (error) {
+    console.error('[DB] Load error, using in-memory defaults:', error);
+  }
+
+  // Prepopulate default accounts if no DB file exists
+  console.log('[DB] DB file not found. Prepopulating default college accounts...');
+  
   const adminId = 'admin-uuid-1111-1111-111111111111';
   const studentId = 'student-uuid-2222-2222-222222222222';
   const profId = 'prof-uuid-3333-3333-333333333333';
 
-  const defaultUsers = [
+  mockUsers.push(
     { id: adminId, email: 'admin@college.edu', password: 'admin123', role: 'admin' },
     { id: studentId, email: 'student@college.edu', password: 'student123', role: 'user' },
     { id: profId, email: 'professor@college.edu', password: 'professor123', role: 'user' }
-  ];
+  );
 
-  for (const du of defaultUsers) {
-    if (!mockUsers.some(u => u.email.toLowerCase() === du.email.toLowerCase())) {
-      mockUsers.push(du);
-    }
-  }
-
-  const defaultProfiles = [
+  mockProfiles.push(
     {
       id: adminId,
       full_name: 'Campus IT Admin',
@@ -82,49 +100,8 @@ export function ensureDefaultAccounts() {
       quota_used: 145,
       created_at: new Date().toISOString()
     }
-  ];
+  );
 
-  for (const dp of defaultProfiles) {
-    if (!mockProfiles.some(p => p.id === dp.id)) {
-      mockProfiles.push(dp);
-    }
-  }
-}
-
-// Helper to load data from db.json
-export function loadDb() {
-  try {
-    const fileToLoad = fs.existsSync(DB_FILE) 
-      ? DB_FILE 
-      : path.join(PRIMARY_DATA_DIR, 'db.json');
-
-    if (fs.existsSync(fileToLoad)) {
-      const content = fs.readFileSync(fileToLoad, 'utf-8');
-      const data = JSON.parse(content);
-      
-      mockUsers.length = 0;
-      mockUsers.push(...(data.users || []));
-      
-      mockProfiles.length = 0;
-      mockProfiles.push(...(data.profiles || []));
-      
-      mockOrders.length = 0;
-      mockOrders.push(...(data.orders || []));
-      
-      mockNotifications.length = 0;
-      mockNotifications.push(...(data.notifications || []));
-      
-      ensureDefaultAccounts();
-      console.log('[DB] Loaded from file successfully.');
-      return;
-    }
-  } catch (error) {
-    console.error('[DB] Load error, using in-memory defaults:', error);
-  }
-
-  // Prepopulate default accounts if no DB file exists
-  console.log('[DB] DB file not found. Prepopulating default college accounts...');
-  ensureDefaultAccounts();
   saveDb();
 }
 
@@ -304,21 +281,13 @@ export const supabaseAdmin = {
   from: (tableName: string) => new QueryBuilder(tableName),
   auth: {
     getUser: async (token: string) => {
-      ensureDefaultAccounts();
       // Decode simulated token "Session-{userId}"
       if (token && token.startsWith('Session-')) {
         const userId = token.replace('Session-', '');
-        let user = mockUsers.find(u => u.id === userId);
-        if (!user) {
-          const profile = mockProfiles.find(p => p.id === userId);
-          user = {
-            id: userId,
-            email: profile ? (profile.role === 'admin' ? 'admin@college.edu' : 'student@college.edu') : 'user@college.edu',
-            role: profile ? profile.role : (userId.includes('admin') ? 'admin' : 'user')
-          };
-          mockUsers.push(user);
+        const user = mockUsers.find(u => u.id === userId);
+        if (user) {
+          return { data: { user }, error: null };
         }
-        return { data: { user }, error: null };
       }
       return { data: { user: null }, error: new Error('User not found') };
     }

@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
-import fs from 'fs';
 import { env } from './config/env';
 import { errorHandler } from './middleware/errorHandler';
 import orderRoutes from './routes/order.routes';
@@ -18,75 +17,22 @@ const app = express();
 
 // Security
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-app.use(cors({
-  origin: env.CORS_ORIGIN === '*' ? true : env.CORS_ORIGIN,
-  credentials: true
-}));
+app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
 
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-function getCleanFileName(filePath: string): string {
-  if (!filePath) return '';
-  const normalized = filePath.replace(/\\/g, '/');
-  return normalized.split('/').pop() || normalized;
-}
-
-// Dynamic file serving for uploads (Base64 from memory or disk)
-app.get('/uploads/:filename', async (req, res, next) => {
-  try {
-    const filename = req.params.filename;
-    const cleanReqFilename = getCleanFileName(filename);
-    const { data: orders } = await supabaseAdmin.from('orders').select('*');
-
-    const order = (orders || []).find((o: any) => {
-      if (!o.file_path) return false;
-      const cleanOrderFilename = getCleanFileName(o.file_path);
-      return cleanOrderFilename === cleanReqFilename;
-    });
-
-    if (order) {
-      // 1. Try memory Base64 buffer
-      if (order.file_data) {
-        const buffer = Buffer.from(order.file_data, 'base64');
-        res.setHeader('Content-Type', order.file_type || 'application/octet-stream');
-        res.setHeader('Content-Length', buffer.length);
-        res.setHeader('Cache-Control', 'no-store');
-        return res.send(buffer);
-      }
-
-      // 2. Try disk file fallback
-      const diskPath = path.resolve(env.UPLOAD_DIR, cleanReqFilename);
-      const originalPath = path.resolve(order.file_path);
-      
-      const fileToStream = fs.existsSync(diskPath) ? diskPath : (fs.existsSync(originalPath) ? originalPath : null);
-
-      if (fileToStream) {
-        const stat = fs.statSync(fileToStream);
-        res.setHeader('Content-Type', order.file_type || 'application/octet-stream');
-        res.setHeader('Content-Length', stat.size);
-        res.setHeader('Cache-Control', 'no-store');
-        return fs.createReadStream(fileToStream).pipe(res);
-      }
-    }
-
-    next();
-  } catch (err) {
-    next();
-  }
-});
-
-// Static file serving for uploads fallback
+// Static file serving for uploads
 app.use('/uploads', express.static(env.UPLOAD_DIR));
 
 // Health check
-app.get(['/api/health', '/health'], (req, res) => {
+app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // GET /api/queue - Poll for new, paid print jobs (status: queued)
-app.get(['/api/queue', '/queue'], async (req, res) => {
+app.get('/api/queue', async (req, res) => {
   try {
     const { data: orders, error } = await supabaseAdmin
       .from('orders')
@@ -98,7 +44,7 @@ app.get(['/api/queue', '/queue'], async (req, res) => {
 
     // Convert file paths to absolute download URLs
     const jobs = (orders || []).map((order: any) => {
-      const fileNameOnServer = getCleanFileName(order.file_path);
+      const fileNameOnServer = path.basename(order.file_path);
       const downloadUrl = `${req.protocol}://${req.get('host')}/uploads/${fileNameOnServer}`;
       return {
         id: order.id,
@@ -121,7 +67,7 @@ app.get(['/api/queue', '/queue'], async (req, res) => {
 });
 
 // POST /api/status - Update print job status from local bridge
-app.post(['/api/status', '/status'], async (req, res) => {
+app.post('/api/status', async (req, res) => {
   try {
     const { jobId, status } = req.body;
     if (!jobId || !status) {
@@ -158,6 +104,7 @@ app.post(['/api/status', '/status'], async (req, res) => {
     }
 
     // Emit real-time status updates via Socket.IO
+    // Map 'printed' to 'completed' for standard frontend status checks if needed
     const socketStatus = status === 'printed' ? 'completed' : status;
     
     emitToUser(order.user_id, 'order:status', {
@@ -200,18 +147,11 @@ app.post(['/api/status', '/status'], async (req, res) => {
   }
 });
 
-// API Routes (mounted for both /api/* and /* paths for Vercel serverless compatibility)
+// API Routes
 app.use('/api/auth', authRoutes);
-app.use('/auth', authRoutes);
-
 app.use('/api/orders', orderRoutes);
-app.use('/orders', orderRoutes);
-
 app.use('/api/payments', paymentRoutes);
-app.use('/payments', paymentRoutes);
-
 app.use('/api/admin', adminRoutes);
-app.use('/admin', adminRoutes);
 
 // Error handler
 app.use(errorHandler);
